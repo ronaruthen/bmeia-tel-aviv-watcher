@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BMEIA Tel Aviv — booking autofill setup</title>
+<style>
+  :root { --p:#3b1c5e; --b:#e6e0ee; --g:#2e7d32; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "DM Sans", Segoe UI, sans-serif; max-width: 760px;
+         margin: 24px auto; padding: 0 18px; color:#222; line-height:1.45; }
+  h1 { font-size: 1.4rem; color: var(--p); margin-bottom: 4px; }
+  p.sub { color:#666; margin-top:0; }
+  fieldset { border:1px solid var(--b); border-radius:10px; margin:18px 0; padding:14px 16px; }
+  legend { font-weight:600; color:var(--p); padding:0 6px; }
+  label { display:block; font-size:.82rem; font-weight:600; margin:10px 0 3px; }
+  input[type=text] { width:100%; padding:8px 10px; border:1px solid #ccc; border-radius:7px; font-size:.95rem; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; }
+  .row > div { flex:1 1 200px; }
+  small { color:#777; font-weight:400; }
+  .hint { background:#f6f2fb; border-left:3px solid var(--p); padding:10px 12px; border-radius:6px; font-size:.88rem; }
+  #out { margin-top:8px; }
+  .bm { display:inline-block; background:var(--p); color:#fff; text-decoration:none;
+        padding:10px 16px; border-radius:8px; font-weight:600; cursor:grab; }
+  .steps { background:#fafafa; border:1px solid var(--b); border-radius:10px; padding:12px 18px; }
+  code { background:#eee; padding:1px 5px; border-radius:4px; }
+  button { background:var(--p); color:#fff; border:0; border-radius:8px; padding:9px 14px;
+           font-weight:600; cursor:pointer; }
+  .ok { color:var(--g); font-weight:600; }
+</style>
+</head>
+<body>
+  <h1>Austrian Embassy Tel Aviv — booking autofill</h1>
+  <p class="sub">Fill your details once below. Everything stays in <b>this browser</b> — nothing is sent
+  anywhere. Then drag the purple button to your bookmarks bar. When a slot opens and you reach the
+  embassy's personal-details page, click that bookmark to fill the whole form instantly.</p>
+
+  <div class="hint">⚠️ For <b>category 1 (passports for newborns)</b>, enter the <b>applicant's</b> details
+  (usually the child). Leave any field blank that doesn't apply (e.g. passport number if there's no
+  passport yet) — blank fields are simply skipped. Match the date format the page shows
+  (typically <code>DD.MM.YYYY</code>).</div>
+
+  <form id="f">
+  <fieldset>
+    <legend>Person</legend>
+    <div class="row">
+      <div><label>First name <small>(Firstname)</small></label><input type="text" data-id="Firstname"></div>
+      <div><label>Last name <small>(Lastname)</small></label><input type="text" data-id="Lastname"></div>
+    </div>
+    <div class="row">
+      <div><label>Surname at birth <small>(LastnameAtBirth)</small></label><input type="text" data-id="LastnameAtBirth"></div>
+      <div><label>Date of birth <small>(DateOfBirth, e.g. 14.05.2026)</small></label><input type="text" data-id="DateOfBirth"></div>
+    </div>
+    <div><label>Place of birth <small>(PlaceOfBirth)</small></label><input type="text" data-id="PlaceOfBirth"></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Travel document (passport) — optional</legend>
+    <div><label>Document number <small>(TraveldocumentNumber)</small></label><input type="text" data-id="TraveldocumentNumber"></div>
+    <div class="row">
+      <div><label>Date of issue <small>(TraveldocumentDateOfIssue)</small></label><input type="text" data-id="TraveldocumentDateOfIssue"></div>
+      <div><label>Valid until <small>(TraveldocumentValidUntil)</small></label><input type="text" data-id="TraveldocumentValidUntil"></div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Contact &amp; address</legend>
+    <div><label>Street <small>(Street)</small></label><input type="text" data-id="Street"></div>
+    <div class="row">
+      <div><label>Postcode <small>(Postcode)</small></label><input type="text" data-id="Postcode"></div>
+      <div><label>City <small>(City)</small></label><input type="text" data-id="City"></div>
+    </div>
+    <div class="row">
+      <div><label>Telephone <small>(Telephone)</small></label><input type="text" data-id="Telephone"></div>
+      <div><label>Email <small>(Email)</small></label><input type="text" data-id="Email"></div>
+    </div>
+  </fieldset>
+  </form>
+
+  <p><button type="button" id="gen">Generate my bookmarklet ▾</button>
+     <span id="saved"></span></p>
+
+  <div id="out" style="display:none">
+    <p>① Drag this button to your bookmarks bar (or right-click → Bookmark this link):</p>
+    <p><a class="bm" id="bm" href="#">📌 Fill BMEIA form</a></p>
+    <div class="steps">
+      <p><b>How to use it</b></p>
+      <ol>
+        <li>When the Telegram alert fires, open <code>https://appointment.bmeia.gv.at/</code></li>
+        <li>Choose <b>TEL-AVIV</b> → your category → persons → pick the slot → continue to the
+            <b>personal details</b> page.</li>
+        <li>Click the <b>📌 Fill BMEIA form</b> bookmark — all fields fill and the consent box ticks.</li>
+        <li>Type the <b>CAPTCHA</b>, double-check everything, and click <b>Next</b> to confirm. ✅</li>
+      </ol>
+      <p><small>Your details are stored only in this bookmark and in this browser's local storage.
+      To change them, reopen this page, edit, and regenerate.</small></p>
+    </div>
+  </div>
+
+<script>
+  var KEY = "bmeia_autofill_v1";
+  var inputs = Array.prototype.slice.call(document.querySelectorAll("input[data-id]"));
+
+  // restore previously saved values
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+    inputs.forEach(function(el){ if(saved[el.dataset.id]) el.value = saved[el.dataset.id]; });
+    if (Object.keys(saved).length) document.getElementById("saved").innerHTML =
+      '<span class="ok">↺ restored your saved details</span>';
+  } catch(e){}
+
+  function collect(){
+    var d = {};
+    inputs.forEach(function(el){ var v = el.value.trim(); if(v) d[el.dataset.id] = v; });
+    return d;
+  }
+
+  function buildBookmarklet(d){
+    // Runs on the embassy details page: fills inputs by id, ticks GDPR consent,
+    // focuses the captcha box. Never auto-submits.
+    var payload = JSON.stringify(d);
+    var code =
+      "javascript:(function(){" +
+      "var d=" + payload + ";" +
+      "var n=0;for(var k in d){var e=document.getElementById(k);" +
+      "if(e){e.value=d[k];e.dispatchEvent(new Event('input',{bubbles:true}));" +
+      "e.dispatchEvent(new Event('change',{bubbles:true}));n++;}}" +
+      "var c=document.getElementById('DSGVOAccepted');" +
+      "if(c){c.checked=true;c.dispatchEvent(new Event('change',{bubbles:true}));}" +
+      "var cap=document.getElementById('CaptchaText');if(cap){cap.focus();}" +
+      "alert('Filled '+n+' field(s) + consent. Now type the CAPTCHA and click Next.');" +
+      "})();";
+    return code;
+  }
+
+  document.getElementById("gen").addEventListener("click", function(){
+    var d = collect();
+    localStorage.setItem(KEY, JSON.stringify(d));
+    var bm = document.getElementById("bm");
+    bm.setAttribute("href", buildBookmarklet(d));
+    document.getElementById("out").style.display = "block";
+    document.getElementById("saved").innerHTML = '<span class="ok">✓ saved &amp; generated</span>';
+  });
+</script>
+</body>
+</html>

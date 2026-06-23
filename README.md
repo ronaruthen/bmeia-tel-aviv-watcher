@@ -65,6 +65,18 @@ Two repository secrets are required (**Settings → Secrets and variables → Ac
 | `33558575` | 5 · Collecting "Bescheid" + applying for 1st passport |
 | `48078709` | NBoE 2026 |
 
+## Fast-book autofill (optional)
+
+The watcher notifies; it doesn't book (the embassy flow is session-based with a CAPTCHA,
+so booking happens in your own browser). To make booking fast, open
+[`fast-book/autofill-setup.html`](fast-book/autofill-setup.html) locally, enter your
+details once (stored only in your browser — never committed), and drag the generated
+**📌 Fill BMEIA form** button to your bookmarks bar. On the embassy's personal-details
+page, click it to fill every field + tick the GDPR consent; you then type the CAPTCHA and
+press Next. The booking form fields it targets: `Firstname`, `Lastname`, `LastnameAtBirth`,
+`DateOfBirth`, `PlaceOfBirth`, `TraveldocumentNumber`, `TraveldocumentDateOfIssue`,
+`TraveldocumentValidUntil`, `Street`, `Postcode`, `City`, `Telephone`, `Email`.
+
 ## Run locally
 
 ```bash
