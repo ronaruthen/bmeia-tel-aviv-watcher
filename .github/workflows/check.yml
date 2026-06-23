@@ -2,8 +2,8 @@ name: Check BMEIA Tel Aviv appointment
 
 on:
   schedule:
-    # Best-effort hourly. GitHub may delay scheduled runs under load.
-    - cron: "0 * * * *"
+    # Best-effort every 15 minutes. GitHub may delay scheduled runs under load.
+    - cron: "*/15 * * * *"
   workflow_dispatch:
     # Manual "Run workflow" button. Set announce=true to get a status ping
     # even when nothing changed (useful for the first run).
