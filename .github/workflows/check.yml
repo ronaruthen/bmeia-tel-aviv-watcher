@@ -38,6 +38,10 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Email backup (optional — set these three repo secrets to enable):
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
           BMEIA_ANNOUNCE: ${{ inputs.announce && '1' || '' }}
           # Optional overrides (defaults baked into the script):
           # BMEIA_CALENDAR_ID: "25889593"   # 1. Passports/IDs/Citizenship for newborns

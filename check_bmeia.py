@@ -51,6 +51,17 @@ STATE_FILE = os.environ.get(
 TELEGRAM_TOKEN   = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 
+# Email backup (optional). Defaults to Gmail SMTP; needs an app password in SMTP_PASS.
+# Email is sent only for real "earlier slot" alerts, not for status/heartbeat pings.
+SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
+SMTP_USER = os.environ.get("SMTP_USER", "").strip()   # sending Gmail address
+SMTP_PASS = os.environ.get("SMTP_PASS", "").strip()   # Gmail app password
+EMAIL_TO  = os.environ.get("EMAIL_TO", "").strip()    # where to send alerts
+
+# Weekly "still alive" heartbeat (Telegram). 0 disables it.
+HEARTBEAT_DAYS = float(os.environ.get("BMEIA_HEARTBEAT_DAYS", "7"))
+
 USER_AGENT = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
               "AppleWebKit/537.36 (KHTML, like Gecko) bmeia-watcher")
 TIMEOUT = 60
@@ -209,6 +220,28 @@ def send_telegram(text):
         return False
 
 
+def send_email(subject, body):
+    if not (SMTP_USER and SMTP_PASS and EMAIL_TO):
+        print("  (email not configured — skipping email backup)")
+        return False
+    import smtplib
+    from email.message import EmailMessage
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = SMTP_USER
+    msg["To"] = EMAIL_TO
+    msg.set_content(body)
+    try:
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=30, context=SSL_CONTEXT) as srv:
+            srv.login(SMTP_USER, SMTP_PASS)
+            srv.send_message(msg)
+        print("  email sent")
+        return True
+    except Exception as exc:  # noqa: BLE001
+        print(f"  ! email send failed: {exc}")
+        return False
+
+
 def fmt(dt):
     return dt.strftime("%A, %d %B %Y at %H:%M")
 
@@ -228,54 +261,74 @@ def main():
     earliest = earliest_acceptable_slot(opener, floor)
     state["last_checked"] = datetime.now().isoformat(timespec="seconds")
 
+    booking_link = BASE
+
     if earliest is None:
         print("  -> no acceptable slots currently offered")
         state["last_status"] = "no acceptable slots"
         if ANNOUNCE:
             send_telegram("👋 BMEIA Tel Aviv watcher is live. No slots are currently "
                           "offered for your category; I'll ping you when one opens.")
-        save_state(state)
-        return
-
-    print(f"  -> earliest acceptable slot: {earliest}")
-    state["last_status"] = f"earliest acceptable {earliest.isoformat()}"
-
-    booking_link = BASE
-    improved = baseline is None or earliest < baseline
-    under_cap = cap is None or earliest < cap
-
-    if baseline is None:
-        # No baseline recorded yet — adopt it quietly (or announce on request).
-        state["earliest_seen"] = earliest.isoformat()
-        msg = (f"👋 <b>BMEIA Tel Aviv watcher is live.</b>\n"
-               f"Current earliest slot: <b>{fmt(earliest)}</b>.\n"
-               f"I'll ping you the moment something earlier opens up.\n{booking_link}")
-        if ANNOUNCE:
-            send_telegram(msg)
-        else:
-            print("  baseline recorded (no message; set BMEIA_ANNOUNCE=1 to announce)")
-    elif improved and under_cap:
-        msg = (f"🔔 <b>Earlier Austrian Embassy slot available!</b>\n"
-               f"📅 <b>{fmt(earliest)}</b>\n"
-               f"(was {fmt(baseline)})\n"
-               f"Category 1 · Passports/IDs/Citizenship · Tel Aviv\n"
-               f"Book now → {booking_link}")
-        send_telegram(msg)
-        state["earliest_seen"] = earliest.isoformat()
-        state["last_alerted"] = earliest.isoformat()
-    elif improved:
-        # Earlier than before but not under the cap she asked to be alerted on.
-        print(f"  improved to {earliest} but not under cap {cap} — lowering baseline silently")
-        state["earliest_seen"] = earliest.isoformat()
-        if ANNOUNCE:
-            send_telegram(f"ℹ️ Watcher live. Best slot now {fmt(earliest)} "
-                          f"(no alert — your cap is before {cap.date()}).")
     else:
-        print("  no improvement over baseline — no alert")
-        if ANNOUNCE:
-            send_telegram(f"👋 BMEIA Tel Aviv watcher is live. Current earliest slot "
-                          f"is {fmt(earliest)} (= your current baseline). "
-                          f"I'll ping you when something earlier opens.")
+        print(f"  -> earliest acceptable slot: {earliest}")
+        state["last_status"] = f"earliest acceptable {earliest.isoformat()}"
+
+        improved = baseline is None or earliest < baseline
+        under_cap = cap is None or earliest < cap
+
+        if baseline is None:
+            # No baseline recorded yet — adopt it quietly (or announce on request).
+            state["earliest_seen"] = earliest.isoformat()
+            msg = (f"👋 <b>BMEIA Tel Aviv watcher is live.</b>\n"
+                   f"Current earliest slot: <b>{fmt(earliest)}</b>.\n"
+                   f"I'll ping you the moment something earlier opens up.\n{booking_link}")
+            if ANNOUNCE:
+                send_telegram(msg)
+            else:
+                print("  baseline recorded (no message; set BMEIA_ANNOUNCE=1 to announce)")
+        elif improved and under_cap:
+            # The real deal — alert on both Telegram and email.
+            send_telegram(f"🔔 <b>Earlier Austrian Embassy slot available!</b>\n"
+                          f"📅 <b>{fmt(earliest)}</b>\n"
+                          f"(was {fmt(baseline)})\n"
+                          f"Category 1 · Passports/IDs/Citizenship · Tel Aviv\n"
+                          f"Book now → {booking_link}")
+            send_email("Earlier Austrian Embassy Tel Aviv slot available",
+                       f"An earlier appointment slot just opened up.\n\n"
+                       f"  When:  {fmt(earliest)}\n"
+                       f"  (was:  {fmt(baseline)})\n"
+                       f"  Category 1 · Passports/IDs/Citizenship · Tel Aviv\n\n"
+                       f"Book it before it's taken: {booking_link}\n\n"
+                       f"— your appointment watcher")
+            state["earliest_seen"] = earliest.isoformat()
+            state["last_alerted"] = earliest.isoformat()
+        elif improved:
+            # Earlier than before but not under the cap she asked to be alerted on.
+            print(f"  improved to {earliest} but not under cap {cap} — lowering baseline silently")
+            state["earliest_seen"] = earliest.isoformat()
+            if ANNOUNCE:
+                send_telegram(f"ℹ️ Watcher live. Best slot now {fmt(earliest)} "
+                              f"(no alert — your cap is before {cap.date()}).")
+        else:
+            print("  no improvement over baseline — no alert")
+            if ANNOUNCE:
+                send_telegram(f"👋 BMEIA Tel Aviv watcher is live. Current earliest slot "
+                              f"is {fmt(earliest)} (= your current baseline). "
+                              f"I'll ping you when something earlier opens.")
+
+    # Weekly heartbeat (Telegram only) so silence means "working", not "broken".
+    if HEARTBEAT_DAYS > 0:
+        last_hb = parse_iso(state.get("last_heartbeat"))
+        now_dt = datetime.now()
+        due = last_hb is None or (now_dt - last_hb).total_seconds() >= HEARTBEAT_DAYS * 86400
+        if due:
+            cur_dt = parse_iso(state.get("earliest_seen"))
+            current = fmt(cur_dt) if cur_dt else "none on offer right now"
+            if send_telegram(f"✅ <b>Embassy watcher weekly check-in</b>\n"
+                             f"Still running — checking every 15 minutes.\n"
+                             f"Current earliest slot: <b>{current}</b>\n"
+                             f"Last checked: {state.get('last_checked', '?')}"):
+                state["last_heartbeat"] = now_dt.isoformat(timespec="seconds")
 
     save_state(state)
 
