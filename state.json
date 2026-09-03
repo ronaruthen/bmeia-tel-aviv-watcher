@@ -2,7 +2,7 @@
   "earliest_seen": "2026-06-29T11:30:00",
   "last_status": "earliest acceptable 2026-09-07T14:00:00",
   "note": "Verified live on 2026-06-23: earliest slot was 22 Sep 2026 11:30. The watcher alerts when something earlier than earliest_seen opens up.",
-  "last_checked": "2026-09-02T23:35:08",
+  "last_checked": "2026-09-03T01:29:32",
   "last_heartbeat": "2026-09-01T23:30:09",
   "last_alerted": "2026-06-29T11:30:00"
 }
