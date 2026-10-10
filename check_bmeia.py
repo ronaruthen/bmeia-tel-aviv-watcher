@@ -24,7 +24,7 @@ import html
 import urllib.parse
 import urllib.request
 import http.cookiejar
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ---------------------------------------------------------------- configuration
 BASE = "https://appointment.bmeia.gv.at/"
@@ -34,10 +34,11 @@ CALENDAR_ID  = os.environ.get("BMEIA_CALENDAR_ID", "25889593")  # 1. Passports/I
 PERSON_COUNT = os.environ.get("BMEIA_PERSON_COUNT", "1")
 LANGUAGE     = os.environ.get("BMEIA_LANGUAGE", "en")
 
-# Ignore anything before this date (Rona can only take a slot from the coming Sunday on).
-EARLIEST_ACCEPTABLE = os.environ.get("BMEIA_EARLIEST_ACCEPTABLE", "2026-06-28")
+# Ignore slots before this ISO date. Slots before tomorrow are always ignored (too late
+# to act on), so leaving this unset means "anything from tomorrow on".
+EARLIEST_ACCEPTABLE = os.environ.get("BMEIA_EARLIEST_ACCEPTABLE", "").strip()
 # Optional hard cap: only alert if the slot is before this ISO date. Empty = alert on
-# every new best slot earlier than the baseline.
+# every slot earlier than the one seen on the previous check.
 ALERT_IF_BEFORE = os.environ.get("BMEIA_ALERT_IF_BEFORE", "").strip()
 # Send a "watcher is live, current earliest = ..." message even when nothing changed.
 ANNOUNCE = os.environ.get("BMEIA_ANNOUNCE", "").strip() in ("1", "true", "yes")
@@ -247,19 +248,32 @@ def fmt(dt):
 
 
 # ---------------------------------------------------------------- main
+def acceptable_floor():
+    """Tomorrow 00:00, or BMEIA_EARLIEST_ACCEPTABLE if that is later."""
+    tomorrow = datetime.combine(datetime.now().date() + timedelta(days=1), datetime.min.time())
+    configured = parse_iso(EARLIEST_ACCEPTABLE)
+    return max(tomorrow, configured) if configured else tomorrow
+
+
 def main():
-    floor = parse_iso(EARLIEST_ACCEPTABLE) or datetime.min
+    floor = acceptable_floor()
     cap = parse_iso(ALERT_IF_BEFORE)
     state = load_state()
-    baseline = parse_iso(state.get("earliest_seen"))
+    # earliest_seen = earliest slot on the PREVIOUS check (None = none on offer then).
+    # It moves both ways, so a slot that opens up earlier than last time always alerts.
+    previous = parse_iso(state.get("earliest_seen"))
+    # No usable reference point: never checked before, or the reference has slid into
+    # the past (e.g. a stale baseline). Adopt the current slot quietly in that case.
+    fresh_start = "last_checked" not in state or (previous is not None and previous < floor)
 
     print(f"Checking {OFFICE} / calendar {CALENDAR_ID} / {PERSON_COUNT} person(s)")
     print(f"  floor (earliest acceptable): {floor.date()}")
-    print(f"  baseline (best seen so far): {baseline}")
+    print(f"  previous check's earliest:   {previous}{' (ignored)' if fresh_start else ''}")
 
     opener = new_opener()
     earliest = earliest_acceptable_slot(opener, floor)
     state["last_checked"] = datetime.now().isoformat(timespec="seconds")
+    state["earliest_seen"] = earliest.isoformat() if earliest else None
 
     booking_link = BASE
 
@@ -273,47 +287,43 @@ def main():
         print(f"  -> earliest acceptable slot: {earliest}")
         state["last_status"] = f"earliest acceptable {earliest.isoformat()}"
 
-        improved = baseline is None or earliest < baseline
+        opened_up = not fresh_start and (previous is None or earliest < previous)
         under_cap = cap is None or earliest < cap
+        was = fmt(previous) if previous else "nothing on offer"
 
-        if baseline is None:
-            # No baseline recorded yet — adopt it quietly (or announce on request).
-            state["earliest_seen"] = earliest.isoformat()
+        if fresh_start:
             msg = (f"👋 <b>BMEIA Tel Aviv watcher is live.</b>\n"
                    f"Current earliest slot: <b>{fmt(earliest)}</b>.\n"
                    f"I'll ping you the moment something earlier opens up.\n{booking_link}")
             if ANNOUNCE:
                 send_telegram(msg)
             else:
-                print("  baseline recorded (no message; set BMEIA_ANNOUNCE=1 to announce)")
-        elif improved and under_cap:
+                print("  reference recorded (no message; set BMEIA_ANNOUNCE=1 to announce)")
+        elif opened_up and under_cap:
             # The real deal — alert on both Telegram and email.
             send_telegram(f"🔔 <b>Earlier Austrian Embassy slot available!</b>\n"
                           f"📅 <b>{fmt(earliest)}</b>\n"
-                          f"(was {fmt(baseline)})\n"
+                          f"(last check: {was})\n"
                           f"Category 1 · Passports/IDs/Citizenship · Tel Aviv\n"
                           f"Book now → {booking_link}")
             send_email("Earlier Austrian Embassy Tel Aviv slot available",
                        f"An earlier appointment slot just opened up.\n\n"
-                       f"  When:  {fmt(earliest)}\n"
-                       f"  (was:  {fmt(baseline)})\n"
+                       f"  When:        {fmt(earliest)}\n"
+                       f"  Last check:  {was}\n"
                        f"  Category 1 · Passports/IDs/Citizenship · Tel Aviv\n\n"
                        f"Book it before it's taken: {booking_link}\n\n"
                        f"— your appointment watcher")
-            state["earliest_seen"] = earliest.isoformat()
             state["last_alerted"] = earliest.isoformat()
-        elif improved:
-            # Earlier than before but not under the cap she asked to be alerted on.
-            print(f"  improved to {earliest} but not under cap {cap} — lowering baseline silently")
-            state["earliest_seen"] = earliest.isoformat()
+        elif opened_up:
+            print(f"  earlier slot {earliest} but not under cap {cap} — no alert")
             if ANNOUNCE:
                 send_telegram(f"ℹ️ Watcher live. Best slot now {fmt(earliest)} "
                               f"(no alert — your cap is before {cap.date()}).")
         else:
-            print("  no improvement over baseline — no alert")
+            print("  nothing earlier than last check — no alert")
             if ANNOUNCE:
                 send_telegram(f"👋 BMEIA Tel Aviv watcher is live. Current earliest slot "
-                              f"is {fmt(earliest)} (= your current baseline). "
+                              f"is {fmt(earliest)}. "
                               f"I'll ping you when something earlier opens.")
 
     # Weekly heartbeat (Telegram only) so silence means "working", not "broken".
@@ -325,7 +335,7 @@ def main():
             cur_dt = parse_iso(state.get("earliest_seen"))
             current = fmt(cur_dt) if cur_dt else "none on offer right now"
             if send_telegram(f"✅ <b>Embassy watcher weekly check-in</b>\n"
-                             f"Still running — checking every 15 minutes.\n"
+                             f"Still running — checking several times a day.\n"
                              f"Current earliest slot: <b>{current}</b>\n"
                              f"Last checked: {state.get('last_checked', '?')}"):
                 state["last_heartbeat"] = now_dt.isoformat(timespec="seconds")

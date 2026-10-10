@@ -46,7 +46,7 @@ jobs:
           # Optional overrides (defaults baked into the script):
           # BMEIA_CALENDAR_ID: "25889593"   # 1. Passports/IDs/Citizenship for newborns
           # BMEIA_PERSON_COUNT: "1"
-          # BMEIA_EARLIEST_ACCEPTABLE: "2026-06-28"
+          # BMEIA_EARLIEST_ACCEPTABLE: ""   # default: tomorrow
           # BMEIA_ALERT_IF_BEFORE: ""        # e.g. "2026-08-01" to only alert before Aug
         run: python check_bmeia.py
 

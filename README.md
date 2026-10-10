@@ -19,10 +19,12 @@ booking flow with a cookie session:
 5. pass the info page → land on the **calendar**, which auto-jumps to the earliest week
    with availability. Open slots are radio inputs like `9/22/2026 11:30:00 AM`.
 
-It takes the earliest slot **on/after** `EARLIEST_ACCEPTABLE` (the coming Sunday by
-default), compares it to `earliest_seen` in [`state.json`](state.json), and if it's
-earlier, sends a Telegram alert and lowers the baseline. De-duped so you aren't pinged
-twice for the same slot.
+It takes the earliest slot from **tomorrow on** (or from `EARLIEST_ACCEPTABLE`, if later)
+and compares it to `earliest_seen` in [`state.json`](state.json) — the earliest slot on the
+*previous* check. If it's earlier (i.e. a cancellation just opened something up), it sends a
+Telegram alert. `earliest_seen` is then overwritten with the current earliest, so it tracks
+the calendar both ways and you aren't pinged twice for the same slot. If the stored value
+has slid into the past, it is ignored and replaced quietly.
 
 ## Scheduling
 
@@ -49,7 +51,7 @@ Two repository secrets are required (**Settings → Secrets and variables → Ac
 | --- | --- | --- |
 | `BMEIA_CALENDAR_ID` | `25889593` | Service category (see table below) |
 | `BMEIA_PERSON_COUNT` | `1` | Number of people/documents |
-| `BMEIA_EARLIEST_ACCEPTABLE` | `2026-06-28` | Ignore slots before this date |
+| `BMEIA_EARLIEST_ACCEPTABLE` | *(unset → tomorrow)* | Ignore slots before this date (never earlier than tomorrow) |
 | `BMEIA_ALERT_IF_BEFORE` | *(unset)* | Only alert if the slot is before this date |
 | `BMEIA_ANNOUNCE` | *(unset)* | `1` → send a status message even with no change |
 | `BMEIA_INSECURE_SSL` | *(unset)* | `1` → skip TLS verify (only for broken local CA bundles) |
